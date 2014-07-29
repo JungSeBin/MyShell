@@ -11,14 +11,16 @@
 #define MAX_STR_LEN 256
 #define CMD_TOKEN_NUM 10
 
-TCHAR ERROR_CMD[]
-= _T("'%s'은(는) 실행할 수 있는 프로그램이 아닙니다.\n");
+//TCHAR ERROR_CMD[]
+//= _T("'%s'은(는) 실행할 수 있는 프로그램이 아닙니다.\n");
 
 int CmdProcessing();
 TCHAR* StrLower(TCHAR*);
 
+
 int _tmain(int argc, _TCHAR* argv[])
 {
+
 	//한글 입력을 가능케 하기 위해.
 	_tsetlocale(LC_ALL, _T("Korean"));
 
@@ -66,7 +68,25 @@ int CmdProcessing()
 		_putts(buffer);
 	}
 	else
-		_putts(cmdTokenList[0]);
+	{
+		STARTUPINFO si = { 0, };
+		PROCESS_INFORMATION pi;
+
+		ZeroMemory(&si, sizeof(si));
+		si.cb = sizeof(si);
+		ZeroMemory(&pi, sizeof(pi));
+
+		if (!CreateProcess(NULL, cmdString, NULL, NULL, FALSE, NULL, NULL, NULL, &si, &pi))
+		{
+			_putts(cmdTokenList[0]);
+		}
+		else
+		{
+			CloseHandle(pi.hProcess);
+			CloseHandle(pi.hThread);
+		}
+	}
+		
 	return 0;
 }
 
