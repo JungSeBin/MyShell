@@ -6,6 +6,7 @@
 #include <locale.h>
 #include <windows.h>
 #include <string.h>
+#include <TlHelp32.h>
 #pragma  warning(disable:4996)
 
 #define MAX_STR_LEN 256
@@ -94,7 +95,7 @@ int CmdProcessing()
 		si.cb = sizeof(si);
 		ZeroMemory(&pi, sizeof(pi));
 
-		if (CreateProcess(NULL, startString, NULL, NULL, TRUE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi))
+		if (CreateProcess(NULL, startString, NULL, NULL, FALSE, CREATE_NEW_CONSOLE, NULL, NULL, &si, &pi))
 		{
 			CloseHandle(pi.hProcess);
 			CloseHandle(pi.hThread);
@@ -102,6 +103,82 @@ int CmdProcessing()
 		else
 		{
 			_putts(_T("Error"));
+		}
+	}
+	else if (!_tcscmp(cmdTokenList[0], _T("list")))
+	{
+		HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+		if (hSnapshot == INVALID_HANDLE_VALUE)
+		{
+			_putts(_T("CreateToolhelp32Snapshot Error"));
+		}
+		else
+		{
+			PROCESSENTRY32 processEntry = { 0, };
+			processEntry.dwSize = sizeof(processEntry);
+			if (!Process32First(hSnapshot, &processEntry))
+			{
+				_putts(_T("Process32First"));
+			}
+			else
+			{
+				do 
+				{
+					_tprintf(_T("%4d %s\n"), processEntry.th32ProcessID, processEntry.szExeFile);
+				} while (Process32Next(hSnapshot,&processEntry));
+			}
+			CloseHandle(hSnapshot);
+		}
+		
+	}
+	else if (!_tcscmp(cmdTokenList[0], _T("kill")))
+	{
+		HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+		DWORD pid = 0;
+		if (hSnapshot == INVALID_HANDLE_VALUE)
+		{
+			_putts(_T("CreateToolhelp32Snapshot Error"));
+		}
+		else
+		{
+			PROCESSENTRY32 processEntry = { 0, };
+			processEntry.dwSize = sizeof(processEntry);
+			if (!Process32First(hSnapshot, &processEntry))
+			{
+				_putts(_T("Process32First"));
+			}
+			else
+			{
+				do
+				{
+					if (_tcscmp(cmdBuffer + 5, processEntry.szExeFile) == 0)
+					{
+						pid = processEntry.th32ProcessID;
+						break;
+					}
+				} while (Process32Next(hSnapshot, &processEntry));
+			}
+			CloseHandle(hSnapshot);
+			if (pid == 0)
+			{
+				_putts(_T("Process Not Found"));
+			}
+			else
+			{
+				HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
+				if (hProcess == INVALID_HANDLE_VALUE)
+				{
+					_putts(_T("OpenProcess Error"));
+				}
+				else
+				{
+					if (!TerminateProcess(hProcess, 0))
+					{
+						_putts(_T("TerminateProcess Error"));
+					}
+					CloseHandle(hProcess);
+				}
+			}
 		}
 	}
 	else
