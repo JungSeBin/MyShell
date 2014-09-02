@@ -181,6 +181,144 @@ int CmdProcessing()
 			}
 		}
 	}
+	else if (!_tcscmp(cmdTokenList[0], _T("dir")))
+	{
+		WIN32_FIND_DATA FindFileData;
+		HANDLE hFind = INVALID_HANDLE_VALUE;
+
+		TCHAR DirSpec[MAX_STR_LEN] = { 0, };
+
+		if (tokenNum > 1)
+		{
+			_tcscpy(DirSpec, cmdBuffer + 4);
+			_tcscat(DirSpec, _T("\\*"));
+		}
+		else
+		{
+			_tcscpy(DirSpec, _T("*"));
+		}
+
+		hFind = FindFirstFile(DirSpec, &FindFileData);
+
+		if (hFind == INVALID_HANDLE_VALUE)
+		{
+			_tprintf(_T("잘못된 경로 입니다.\n"));
+		}
+		else
+		{
+			_putts(FindFileData.cFileName);
+			while (FindNextFile(hFind, &FindFileData) != 0)
+			{
+				_putts(FindFileData.cFileName);
+			}
+			FindClose(hFind);
+		}
+		printf_s("\n");
+	}
+	else if (!_tcscmp(cmdTokenList[0], _T("mkdir")))
+	{
+		TCHAR DirSpec[MAX_STR_LEN] = { 0, };
+
+		if (tokenNum > 1)
+		{
+			_tcscpy(DirSpec, cmdBuffer + 6);
+			if (!CreateDirectory(DirSpec, NULL))
+			{
+				DWORD Error = GetLastError();
+				if (Error == ERROR_ALREADY_EXISTS)
+					_putts(_T("이미 존재하는 디렉토리 입니다."));
+				else if (Error == ERROR_PATH_NOT_FOUND)
+					_putts(_T("잘못된 경로 입니다."));
+			}
+			else
+			{
+				_putts(_T("디렉토리가 생성되었습니다."));
+			}
+			
+		}
+		else
+		{
+			printf_s("명령 구문이 올바르지 않습니다.\n");
+		}
+	}
+	else if (!_tcscmp(cmdTokenList[0], _T("rmdir")))
+	{
+		TCHAR DirSpec[MAX_STR_LEN] = { 0, };
+
+		if (tokenNum > 1)
+		{
+			_tcscpy(DirSpec, cmdBuffer + 6);
+			if (!RemoveDirectory(DirSpec))
+			{
+				_putts(_T("잘못된 경로 입니다."));
+			}
+			else
+			{
+				_putts(_T("디렉토리가 삭제되었습니다."));
+			}
+
+		}
+		else
+		{
+			printf_s("명령 구문이 올바르지 않습니다.\n");
+		}
+	}
+	else if (!_tcscmp(cmdTokenList[0], _T("del")))
+	{
+		TCHAR DirSpec[MAX_STR_LEN] = { 0, };
+
+		if (tokenNum > 1)
+		{
+			_tcscpy(DirSpec, cmdBuffer + 4);
+			if (!DeleteFile(DirSpec))
+			{
+				DWORD error = GetLastError();
+				if (error == ERROR_FILE_NOT_FOUND)
+					_putts(_T("파일이 존재하지 않습니다."));
+				else if (error == ERROR_ACCESS_DENIED)
+					_putts(_T("접근이 거부되었습니다."));
+			}
+			else
+			{
+				_putts(_T("파일이 삭제되었습니다."));
+			}
+
+		}
+		else
+		{
+			printf_s("명령 구문이 올바르지 않습니다.\n");
+		}
+	}
+	else if (!_tcscmp(cmdTokenList[0], _T("ren")))
+	{
+		TCHAR DirSpec[MAX_STR_LEN] = { 0, };
+
+		if (tokenNum == 3)
+		{
+			if (!_trename(cmdTokenList[1], cmdTokenList[2]))
+			{
+				_putts(_T("파일의 이름이 변경되었습니다."));
+			}
+			else if (errno == EACCES)
+			{
+				_putts(_T("새 이름이 잘못되었습니다."));
+			}
+			else if (errno == ENOENT)
+				_putts(_T("파일을 찾을 수 없습니다."));
+			else if (errno == EINVAL)
+				_putts(_T("새 이름에 잘못된 문자가 포함되어있습니다."));
+			else if (errno == EEXIST)
+				_putts(_T("이미 존재하는 파일이름입니다."));
+			else
+			{
+				_tprintf(_T("알수없는 에러입니다.%d\n"), errno);
+			}
+		}
+		else
+		{
+			printf_s("명령 구문이 올바르지 않습니다.\n");
+		}
+	}
 	else
 	{
 		STARTUPINFO si = { 0, };
