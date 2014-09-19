@@ -7,10 +7,14 @@
 #include <windows.h>
 #include <string.h>
 #include <TlHelp32.h>
+#include <vector>
 #pragma  warning(disable:4996)
 
 #define MAX_STR_LEN 256
 #define CMD_TOKEN_NUM 10
+#define MAX_BUF_SIZE 256
+#define MAX_STR_NUM 256
+#define MAX_HISTORY 256
 
 //TCHAR ERROR_CMD[]
 //= _T("'%s'은(는) 실행할 수 있는 프로그램이 아닙니다.\n");
@@ -19,6 +23,8 @@ TCHAR* cmdName = NULL;
 TCHAR cmdString[MAX_STR_LEN] = { 0, };
 TCHAR cmdTokenList[CMD_TOKEN_NUM][MAX_STR_LEN];
 TCHAR seps[] = _T(" ,\t\n");
+TCHAR cmdHistory[MAX_HISTORY][MAX_STR_LEN];
+int historyHead = 0;
 
 int CmdProcessing();
 TCHAR* StrLower(TCHAR*);
@@ -56,7 +62,34 @@ int CmdProcessing()
 {
 	TCHAR cmdBuffer[MAX_STR_LEN] = { 0, };
 	
+
+	if (cmdString[0] == '!')
+	{
+		TCHAR* cmdStr = cmdString + 1;
+		if (cmdStr[0] == '!')
+		{
+			_tcscpy(cmdString, cmdHistory[(historyHead - 1 + MAX_HISTORY) % MAX_HISTORY]);
+		}
+		else
+		{
+			for (int i = (historyHead - 1 + MAX_HISTORY) % MAX_HISTORY
+				; i != historyHead && cmdHistory[i][0]
+				; i = (i - 1 + MAX_HISTORY) % MAX_HISTORY)
+			{
+				TCHAR tmp[MAX_STR_LEN] = { 0, };
+				_tcscpy(tmp, cmdHistory[i]);
+				if (!_tcscmp(cmdStr, _tcstok(tmp, seps)))
+				{
+					_tcscpy(cmdString, cmdHistory[i]);
+					break;
+				}
+			}
+		}
+	}
+
 	_tcscpy(cmdBuffer, cmdString);
+	_tcscpy(cmdHistory[historyHead], cmdString);
+	historyHead = (historyHead + 1) % MAX_HISTORY;
 
 	TCHAR* token = _tcstok(cmdString, seps);
 
@@ -67,6 +100,52 @@ int CmdProcessing()
 			cmdTokenList[tokenNum++], StrLower(token)
 			);
 		token = _tcstok(NULL, seps);
+	}
+	for (int i = 0; i < _tcslen(cmdBuffer); ++i)
+	{
+		if (cmdBuffer[i] == '|')
+		{
+			TCHAR strLeft[MAX_STR_LEN] = { 0, };
+			_tcsncpy(strLeft, cmdBuffer, i);
+			TCHAR* strRight = cmdBuffer + i + 1;
+			while (strRight[0] == ' ') ++strRight;
+
+			HANDLE readPipe;
+			HANDLE writePipe;
+
+			SECURITY_ATTRIBUTES pipesa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
+			CreatePipe(&readPipe, &writePipe, &pipesa, 0);
+
+			STARTUPINFO si = { 0, };
+			PROCESS_INFORMATION piLeft;
+
+			si.cb = sizeof(si);
+			si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+			si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+			si.hStdOutput = writePipe;
+			si.dwFlags = STARTF_USESTDHANDLES;
+			CreateProcess(NULL, strLeft, NULL, NULL, TRUE, 0, NULL, NULL, &si, &piLeft);
+			CloseHandle(piLeft.hThread);
+			CloseHandle(writePipe);
+
+			PROCESS_INFORMATION piRight;
+
+			si.cb = sizeof(si);
+			si.hStdInput = readPipe;
+			si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+			si.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+			si.dwFlags = STARTF_USESTDHANDLES;
+			CreateProcess(NULL, strRight, NULL, NULL, TRUE, 0, NULL, NULL, &si, &piRight);
+			CloseHandle(piRight.hThread);
+			CloseHandle(readPipe);
+
+			WaitForSingleObject(piLeft.hProcess, INFINITE);
+			WaitForSingleObject(piRight.hProcess, INFINITE);
+
+			CloseHandle(piLeft.hProcess);
+			CloseHandle(piRight.hProcess);
+			return 0;
+		}
 	}
 
 	if (!_tcscmp(cmdTokenList[0], _T("exit")))
@@ -319,6 +398,41 @@ int CmdProcessing()
 			printf_s("명령 구문이 올바르지 않습니다.\n");
 		}
 	}
+	else if (!_tcscmp(cmdTokenList[0], _T("type")))
+	{
+		STARTUPINFO si = { 0, };
+		PROCESS_INFORMATION pi = { 0, };
+
+		si.cb = sizeof(si);
+		CreateProcess(NULL, cmdBuffer, NULL, NULL, FALSE, NULL, NULL, NULL, &si, &pi);
+
+		WaitForSingleObject(pi.hProcess, INFINITE);
+		CloseHandle(pi.hProcess);
+		CloseHandle(pi.hThread);
+	}
+	else if (!_tcscmp(cmdTokenList[0], _T("sort")))
+	{
+		STARTUPINFO si = { 0, };
+		PROCESS_INFORMATION pi = { 0, };
+
+		si.cb = sizeof(si);
+		CreateProcess(NULL, cmdBuffer, NULL, NULL, FALSE, NULL, NULL, NULL, &si, &pi);
+
+		WaitForSingleObject(pi.hProcess, INFINITE);
+		CloseHandle(pi.hProcess);
+		CloseHandle(pi.hThread);
+	}
+	else if (!_tcscmp(cmdTokenList[0], _T("history")))
+	{
+		_putts(_T("↓이전 수행 명령어↓"));
+		int num = 1;
+		for (int i = cmdHistory[historyHead][0] ? historyHead : 0; i != (historyHead-1+MAX_HISTORY)%MAX_HISTORY; ++i)
+		{
+			_tprintf_s(_T("%d. %s\n"), num++, cmdHistory[i]);
+		}
+		if (num == 1)
+			_putts(_T("(이전 수행 명령어 없음.)"));
+	}
 	else
 	{
 		STARTUPINFO si = { 0, };
@@ -331,6 +445,7 @@ int CmdProcessing()
 		if (!CreateProcess(NULL, cmdBuffer, NULL, NULL, FALSE, NULL, NULL, NULL, &si, &pi))
 		{
 			_putts(cmdBuffer);
+			historyHead = (historyHead - 1 + MAX_HISTORY) % MAX_HISTORY;
 		}
 		else
 		{
@@ -338,6 +453,7 @@ int CmdProcessing()
 			CloseHandle(pi.hThread);
 		}
 	}
+	printf_s("\n");
 		
 	return 0;
 }
